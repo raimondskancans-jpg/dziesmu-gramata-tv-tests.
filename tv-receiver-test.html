@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="lv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Dziesmu grāmata — TV ekrāns (tests)</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#000;color:#fff;font-family:Arial,Helvetica,sans-serif;min-height:100vh}header{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-bottom:1px solid #333}header h1{font-size:clamp(18px,3vw,30px);margin:0;font-weight:600}button{border:1px solid #777;border-radius:10px;background:#202020;color:#fff;padding:10px 14px;font-size:16px;cursor:pointer}button:disabled{opacity:.45;cursor:default}.status{padding:10px 18px;color:#bbb;font-size:14px}.stage{height:calc(100vh - 100px);display:flex;flex-direction:column;padding:18px 5vw 5vh}.title{text-align:center;font-size:clamp(22px,3vw,38px);font-weight:700;margin:0 0 18px}.lyrics{flex:1;overflow:auto;white-space:pre-wrap;line-height:1.5;text-align:center;font-size:56px;padding:0 2vw 40px;scrollbar-width:none}.lyrics::-webkit-scrollbar{display:none}.overlay{position:fixed;inset:0;background:#000e;display:flex;align-items:center;justify-content:center;padding:18px;z-index:10}.panel{width:min(680px,100%);max-height:90vh;overflow:auto;background:#171717;border:1px solid #555;border-radius:18px;padding:22px}.panel h2{margin:0 0 12px}.panel p{color:#ccc;line-height:1.45}.qr{display:flex;justify-content:center;background:white;padding:14px;border-radius:12px;width:max-content;max-width:100%;margin:16px auto}.code{text-align:center;font-size:24px;letter-spacing:4px;font-weight:bold}.requests{display:grid;gap:10px;margin:12px 0}.request{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:#292929;border-radius:10px;padding:10px}.muted{color:#aaa;font-size:13px}.actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:14px}.hidden{display:none!important}.small{font-size:13px;color:#aaa}
+</style>
+</head>
+<body>
+<header><h1>Dziesmu grāmata — TV ekrāns</h1><button id="reopen">Vadība</button></header>
+<div class="status" id="status">Pieslēdzam testa Firebase…</div>
+<main class="stage"><div class="title" id="songTitle">Gaida dziesmu…</div><div class="lyrics" id="songLyrics"></div></main>
+<div class="overlay" id="setup">
+ <section class="panel">
+  <h2>TV pieslēgšana</h2>
+  <p>Šis televizors izveido privātu testa telpu. Noskenē QR kodu ar telefonu, kurā atvērta dziesmu grāmata. Telefona vadība sāks darboties pēc tava apstiprinājuma.</p>
+  <div class="qr" id="qr">Veido QR kodu…</div>
+  <div class="code" id="roomCode">—</div>
+  <p class="small" id="phoneLink"></p>
+  <h3>Vadības pieprasījumi</h3>
+  <div class="requests" id="requests"><span class="muted">Pagaidām nav pieprasījumu.</span></div>
+  <div class="actions"><button id="revoke" class="hidden">Atsaukt telefona vadību</button><button id="closeSetup">Paslēpt šo logu</button><button id="endRoom">Beigt TV sesiju</button></div>
+  <p class="small">Testa vide. Izmanto tikai testa Firebase projektu.</p>
+ </section>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script type="module">
+const config={apiKey:'AIzaSyAgP5N2fCBeeyB_hXzC3ysb6J2-VPcUgzo',authDomain:'digitala-dziesmu-gramata-test.firebaseapp.com',databaseURL:'https://digitala-dziesmu-gramata-test-default-rtdb.europe-west1.firebasedatabase.app',projectId:'digitala-dziesmu-gramata-test',appId:'1:917156239812:web:d55031b0d3607a41b96c91'};
+const statusEl=document.getElementById('status'),setup=document.getElementById('setup'),requestsEl=document.getElementById('requests'),lyricsEl=document.getElementById('songLyrics');
+let db,dbm,roomCode,roomRef,ownerUid,controllerUid=null,roomData=null,anim=0,last=0;
+const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function makeCode(){const b=new Uint8Array(8);crypto.getRandomValues(b);return [...b].map(x=>alphabet[x%alphabet.length]).join('')}
+function setStatus(t){statusEl.textContent=t}
+function renderRoom(data){roomData=data||{};document.getElementById('songTitle').textContent=data?.title||'Gaida dziesmu…';lyricsEl.textContent=data?.lyrics||'';controllerUid=data?.controllerUid||null;document.getElementById('revoke').classList.toggle('hidden',!controllerUid);renderRequests(data?.pendingRequests||{});const c=data?.scrollControl||{};if(Number.isFinite(Number(c.fontSize)))lyricsEl.style.fontSize=Math.max(28,Math.min(96,Number(c.fontSize)))+'px';if(c.running){startScroll(Number(c.speed)||0.1)}else{stopScroll()}}
+function renderRequests(pending){requestsEl.replaceChildren();const entries=Object.entries(pending||{});if(!entries.length){const s=document.createElement('span');s.className='muted';s.textContent=controllerUid?'Vadību pašlaik tur viens telefons.':'Pagaidām nav pieprasījumu.';requestsEl.append(s);return}for(const [uid,req] of entries){const row=document.createElement('div');row.className='request';const label=document.createElement('span');label.textContent='Telefons · '+uid.slice(0,8);const approve=document.createElement('button');approve.textContent='Apstiprināt';approve.disabled=!!controllerUid;approve.onclick=()=>approveUid(uid);const reject=document.createElement('button');reject.textContent='Noraidīt';reject.onclick=()=>rejectUid(uid);row.append(label,approve,reject);requestsEl.append(row)}}
+async function approveUid(uid){try{await dbm.set(dbm.ref(db,'rooms/'+roomCode+'/controllerUid'),uid);await dbm.remove(dbm.ref(db,'rooms/'+roomCode+'/pendingRequests/'+uid));setStatus('Telefona vadība apstiprināta.')}catch(e){alert('Neizdevās apstiprināt: '+e.message)}}
+async function rejectUid(uid){try{await dbm.remove(dbm.ref(db,'rooms/'+roomCode+'/pendingRequests/'+uid))}catch(e){alert('Neizdevās noraidīt: '+e.message)}}
+function stopScroll(){if(anim)cancelAnimationFrame(anim);anim=0;last=0}
+function startScroll(speed){if(anim)return;const step=t=>{if(!roomData?.scrollControl?.running){stopScroll();return}if(last){const dt=Math.min(60,t-last);const max=Math.max(0,lyricsEl.scrollHeight-lyricsEl.clientHeight);lyricsEl.scrollTop=Math.min(max,lyricsEl.scrollTop+speed*60*dt/1000);if(lyricsEl.scrollTop>=max-1){stopScroll();return}}last=t;anim=requestAnimationFrame(step)};anim=requestAnimationFrame(step)}
+async function endRoom(){if(!confirm('Beigt šo TV testa sesiju?'))return;try{await dbm.remove(roomRef);location.reload()}catch(e){alert('Neizdevās beigt sesiju: '+e.message)}}
+try{
+ const [appMod,authMod,dbMod]=await Promise.all([import('https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js'),import('https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js'),import('https://www.gstatic.com/firebasejs/11.6.0/firebase-database.js')]);dbm=dbMod;const app=appMod.initializeApp(config,'songbook-tv-receiver-test');const auth=authMod.getAuth(app);if(!auth.currentUser)await authMod.signInAnonymously(auth);ownerUid=auth.currentUser.uid;db=dbMod.getDatabase(app);roomCode=makeCode();roomRef=dbMod.ref(db,'rooms/'+roomCode);
+ await dbMod.set(roomRef,{ownerUid,controllerUid:null,pendingRequests:{},title:'TV ir gatavs',lyrics:'Noskenē QR kodu ar dziesmu grāmatu.',createdAt:Date.now(),scrollControl:{speed:0.1,running:false,fontSize:56}});
+ const phoneUrl=new URL('index.html',location.href);phoneUrl.searchParams.set('room',roomCode);phoneUrl.searchParams.set('mode','sender');document.getElementById('roomCode').textContent=roomCode;document.getElementById('phoneLink').textContent=phoneUrl.href;document.getElementById('qr').replaceChildren();if(window.QRCode)new QRCode(document.getElementById('qr'),{text:phoneUrl.href,width:240,height:240,correctLevel:QRCode.CorrectLevel.H});else document.getElementById('qr').textContent=phoneUrl.href;
+ dbMod.onValue(roomRef,snap=>{if(!snap.exists()){setStatus('TV sesija ir beigusies.');return}renderRoom(snap.val());setStatus(controllerUid?'Telefons ir pieslēgts vadībai.':'Gaida telefona pieslēgumu…')});
+ document.getElementById('revoke').onclick=async()=>{try{await dbMod.set(dbMod.ref(db,'rooms/'+roomCode+'/controllerUid'),null);setStatus('Telefona vadība atsaukta.')}catch(e){alert(e.message)}};
+ document.getElementById('endRoom').onclick=endRoom;document.getElementById('closeSetup').onclick=()=>setup.classList.add('hidden');document.getElementById('reopen').onclick=()=>setup.classList.remove('hidden');
+}catch(e){setStatus('Savienojums neizdevās: '+e.message);document.getElementById('qr').textContent='Pārbaudi testa Firebase savienojumu un datubāzes noteikumus.'}
+</script>
+</body>
+</html>
