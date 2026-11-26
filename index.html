@@ -4544,7 +4544,7 @@ pēc video apraksta dziesmas komponējis neredzīgais komponists imants ozols, d
 
     let currentSongId = '001';
     let isEditMode = false;
-    const PUBLIC_SITE_URL = "https://raimondskancans-jpg.github.io/digdzgr/";
+    const PUBLIC_SITE_URL = new URL('./', window.location.href).href;
 
     const defaultSongsList = [
       { id: '001', title: 'Vēl tu rozes plūc' },
@@ -5359,6 +5359,8 @@ pēc video apraksta dziesmas komponējis neredzīgais komponists imants ozols, d
     let tvFirebaseDb = null;
     window.getTvFirebaseDb = () => tvFirebaseDb;
     let tvLyricsAreSent = false;
+    window.tvControllerApproved = false;
+    window.tvControllerUid = null;
 
     async function ensureTvFirebase() {
       if (!tvFirebaseReadyPromise) {
@@ -5367,15 +5369,25 @@ pēc video apraksta dziesmas komponējis neredzīgais komponists imants ozols, d
           const authMod = await import('https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js');
           const dbMod = await import('https://www.gstatic.com/firebasejs/11.6.0/firebase-database.js');
           const config = {
-            apiKey: 'AIzaSyA5AxDnEhA3kYFuTxscoQj0AC9lLKO-nRs',
-            authDomain: 'digitala-dziesmu-gramata.firebaseapp.com',
-            databaseURL: 'https://digitala-dziesmu-gramata-default-rtdb.europe-west1.firebasedatabase.app',
-            projectId: 'digitala-dziesmu-gramata',
-            appId: '1:312876098365:web:1c0dba179b3996c7409b54'
+            apiKey: 'AIzaSyAgP5N2fCBeeyB_hXzC3ysb6J2-VPcUgzo',
+            authDomain: 'digitala-dziesmu-gramata-test.firebaseapp.com',
+            databaseURL: 'https://digitala-dziesmu-gramata-test-default-rtdb.europe-west1.firebasedatabase.app',
+            projectId: 'digitala-dziesmu-gramata-test',
+            appId: '1:917156239812:web:d55031b0d3607a41b96c91'
           };
-          const app = appMod.initializeApp(config, 'songbook-tv-sender');
-          await authMod.signInAnonymously(authMod.getAuth(app));
+          const app = appMod.initializeApp(config, 'songbook-tv-sender-test');
+          const auth = authMod.getAuth(app);
+          if (!auth.currentUser) await authMod.signInAnonymously(auth);
           tvFirebaseDb = dbMod.getDatabase(app);
+          // Phone asks the TV owner for control access. The TV owner must approve it.
+          const uid = auth.currentUser.uid;
+          window.tvControllerUid = uid;
+          const requestRef = dbMod.ref(tvFirebaseDb, 'rooms/' + tvRoomCode + '/pendingRequests/' + uid);
+          await dbMod.set(requestRef, { requestedAt: Date.now() });
+          dbMod.onValue(dbMod.ref(tvFirebaseDb, 'rooms/' + tvRoomCode + '/controllerUid'), snap => {
+            window.tvControllerApproved = snap.val() === uid;
+            document.documentElement.dataset.tvControllerApproved = window.tvControllerApproved ? 'yes' : 'no';
+          });
           return { ...dbMod };
         })();
       }
@@ -5388,12 +5400,10 @@ pēc video apraksta dziesmas komponējis neredzīgais komponists imants ozols, d
       const title = document.getElementById('currentSongTitle')?.innerText || (currentSongId + '. Dziesma');
       const lyrics = typeof song.lyrics === 'string' ? song.lyrics : '';
       const dbMod = await ensureTvFirebase();
-      const roomRef = dbMod.ref(tvFirebaseDb, 'rooms/' + tvRoomCode);
-      await dbMod.update(roomRef, {
-        title: title,
-        lyrics: lyrics || 'Teksts vēl nav pievienots.',
-        updatedAt: dbMod.serverTimestamp()
-      });
+      const base = 'rooms/' + tvRoomCode + '/';
+      await dbMod.set(dbMod.ref(tvFirebaseDb, base + 'title'), title);
+      await dbMod.set(dbMod.ref(tvFirebaseDb, base + 'lyrics'), lyrics || 'Teksts vēl nav pievienots.');
+      await dbMod.set(dbMod.ref(tvFirebaseDb, base + 'updatedAt'), dbMod.serverTimestamp());
     }
 
     async function triggerCast() {
@@ -5406,14 +5416,22 @@ pēc video apraksta dziesmas komponējis neredzīgais komponists imants ozols, d
         try {
           buttons.forEach(b => b.disabled = true);
           const dbMod = await ensureTvFirebase();
-          const roomRef = dbMod.ref(tvFirebaseDb, 'rooms/' + tvRoomCode);
+          const base = 'rooms/' + tvRoomCode + '/';
+          if (!window.tvControllerApproved) {
+            alert('Vadības pieprasījums nosūtīts. Apstiprini šo telefonu TV ekrānā un tad nospied TV pogu vēlreiz.');
+            return;
+          }
           if (tvLyricsAreSent) {
-            await dbMod.update(roomRef, { title: 'Mana dziesmu grāmata', lyrics: '', updatedAt: dbMod.serverTimestamp() });
+            await dbMod.set(dbMod.ref(tvFirebaseDb, base + 'title'), 'Mana dziesmu grāmata');
+            await dbMod.set(dbMod.ref(tvFirebaseDb, base + 'lyrics'), '');
+            await dbMod.set(dbMod.ref(tvFirebaseDb, base + 'updatedAt'), dbMod.serverTimestamp());
             tvLyricsAreSent = false;
             if (window.setTvRemoteActive) window.setTvRemoteActive(false);
             buttons.forEach(b => { b.title = 'Pārraidīt uz TV'; b.setAttribute('aria-label', 'Pārraidīt uz TV'); });
           } else {
-            await dbMod.update(roomRef, { title: title, lyrics: lyrics || 'Teksts vēl nav pievienots.', updatedAt: dbMod.serverTimestamp() });
+            await dbMod.set(dbMod.ref(tvFirebaseDb, base + 'title'), title);
+            await dbMod.set(dbMod.ref(tvFirebaseDb, base + 'lyrics'), lyrics || 'Teksts vēl nav pievienots.');
+            await dbMod.set(dbMod.ref(tvFirebaseDb, base + 'updatedAt'), dbMod.serverTimestamp());
             tvLyricsAreSent = true;
             if (window.setTvRemoteActive) window.setTvRemoteActive(true);
             buttons.forEach(b => { b.title = 'Noņemt no TV'; b.setAttribute('aria-label', 'Noņemt no TV'); });
@@ -6144,11 +6162,11 @@ pēc video apraksta dziesmas komponējis neredzīgais komponists imants ozols, d
           const authMod = await import('https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js');
           const dbMod = await import('https://www.gstatic.com/firebasejs/11.6.0/firebase-database.js');
           const config = {
-            apiKey: 'AIzaSyA5AxDnEhA3kYFuTxscoQj0AC9lLKO-nRs',
-            authDomain: 'digitala-dziesmu-gramata.firebaseapp.com',
-            databaseURL: 'https://digitala-dziesmu-gramata-default-rtdb.europe-west1.firebasedatabase.app',
-            projectId: 'digitala-dziesmu-gramata',
-            appId: '1:312876098365:web:1c0dba179b3996c7409b54'
+            apiKey: 'AIzaSyAgP5N2fCBeeyB_hXzC3ysb6J2-VPcUgzo',
+            authDomain: 'digitala-dziesmu-gramata-test.firebaseapp.com',
+            databaseURL: 'https://digitala-dziesmu-gramata-test-default-rtdb.europe-west1.firebasedatabase.app',
+            projectId: 'digitala-dziesmu-gramata-test',
+            appId: '1:917156239812:web:d55031b0d3607a41b96c91'
           };
           let app;
           try { app = appMod.getApp('songbook-group-host'); }
@@ -6330,7 +6348,7 @@ pēc video apraksta dziesmas komponējis neredzīgais komponists imants ozols, d
 
 </script>
 
-<iframe ng-non-bindable="" frameborder="0" hspace="0" marginheight="0" marginwidth="0" scrolling="no" tabindex="-1" vspace="0" width="100%" aria-hidden="true" id="I0_1793917806385" name="I0_1793917806385" src="https://digitala-dziesmu-gramata.firebaseapp.com/__/auth/iframe?apiKey=AIzaSyA5AxDnEhA3kYFuTxscoQj0AC9lLKO-nRs&amp;appName=songbook-group-host&amp;v=11.6.0&amp;eid=p&amp;usegapi=1&amp;jsh=m%3B%2F_%2Fscs%2Fabc-static%2F_%2Fjs%2Fk%3Dgapi.lb.lv.m0GIev7pGSg.O%2Fd%3D1%2Frs%3DAHpOoo8fcN3BgkFFDTc1x5QjE61_p0zSag%2Fm%3D__features__#id=I0_1793917806385&amp;_gfid=I0_1793917806385&amp;parent=https%3A%2F%2Fraimondskancans-jpg.github.io&amp;pfname=&amp;rpctoken=15049893" style="position: absolute; top: -100px; width: 1px; height: 1px;"></iframe><iframe ng-non-bindable="" frameborder="0" hspace="0" marginheight="0" marginwidth="0" scrolling="no" tabindex="-1" vspace="0" width="100%" aria-hidden="true" id="I0_1794212068964" name="I0_1794212068964" src="https://digitala-dziesmu-gramata.firebaseapp.com/__/auth/iframe?apiKey=AIzaSyA5AxDnEhA3kYFuTxscoQj0AC9lLKO-nRs&amp;appName=songbook-group-host&amp;v=11.6.0&amp;eid=p&amp;usegapi=1&amp;jsh=m%3B%2F_%2Fscs%2Fabc-static%2F_%2Fjs%2Fk%3Dgapi.lb.lv.m0GIev7pGSg.O%2Fd%3D1%2Frs%3DAHpOoo8fcN3BgkFFDTc1x5QjE61_p0zSag%2Fm%3D__features__#id=I0_1794212068964&amp;_gfid=I0_1794212068964&amp;parent=https%3A%2F%2Fraimondskancans-jpg.github.io&amp;pfname=&amp;rpctoken=69040684" style="position: absolute; top: -100px; width: 1px; height: 1px;"></iframe><div class="tv-phone-controls" id="tvPhoneControls" aria-label="TV vadība no telefona">
+<iframe ng-non-bindable="" frameborder="0" hspace="0" marginheight="0" marginwidth="0" scrolling="no" tabindex="-1" vspace="0" width="100%" aria-hidden="true" id="I0_1793917806385" name="I0_1793917806385" src="https://digitala-dziesmu-gramata-test.firebaseapp.com/__/auth/iframe?apiKey=AIzaSyAgP5N2fCBeeyB_hXzC3ysb6J2-VPcUgzo&amp;appName=songbook-group-host&amp;v=11.6.0&amp;eid=p&amp;usegapi=1&amp;jsh=m%3B%2F_%2Fscs%2Fabc-static%2F_%2Fjs%2Fk%3Dgapi.lb.lv.m0GIev7pGSg.O%2Fd%3D1%2Frs%3DAHpOoo8fcN3BgkFFDTc1x5QjE61_p0zSag%2Fm%3D__features__#id=I0_1793917806385&amp;_gfid=I0_1793917806385&amp;parent=https%3A%2F%2Fraimondskancans-jpg.github.io&amp;pfname=&amp;rpctoken=15049893" style="position: absolute; top: -100px; width: 1px; height: 1px;"></iframe><iframe ng-non-bindable="" frameborder="0" hspace="0" marginheight="0" marginwidth="0" scrolling="no" tabindex="-1" vspace="0" width="100%" aria-hidden="true" id="I0_1794212068964" name="I0_1794212068964" src="https://digitala-dziesmu-gramata-test.firebaseapp.com/__/auth/iframe?apiKey=AIzaSyAgP5N2fCBeeyB_hXzC3ysb6J2-VPcUgzo&amp;appName=songbook-group-host&amp;v=11.6.0&amp;eid=p&amp;usegapi=1&amp;jsh=m%3B%2F_%2Fscs%2Fabc-static%2F_%2Fjs%2Fk%3Dgapi.lb.lv.m0GIev7pGSg.O%2Fd%3D1%2Frs%3DAHpOoo8fcN3BgkFFDTc1x5QjE61_p0zSag%2Fm%3D__features__#id=I0_1794212068964&amp;_gfid=I0_1794212068964&amp;parent=https%3A%2F%2Fraimondskancans-jpg.github.io&amp;pfname=&amp;rpctoken=69040684" style="position: absolute; top: -100px; width: 1px; height: 1px;"></iframe><div class="tv-phone-controls" id="tvPhoneControls" aria-label="TV vadība no telefona">
   <button type="button" class="font-btn" id="phoneFontMinus" aria-label="Samazināt TV burtus">A−</button>
   <button type="button" class="font-btn" id="phoneFontPlus" aria-label="Palielināt TV burtus">A+</button>
   <span class="phone-divider"></span>
@@ -6391,9 +6409,8 @@ pēc video apraksta dziesmas komponējis neredzīgais komponists imants ozols, d
       const dbMod = await window.ensureTvFirebase();
       const db = window.getTvFirebaseDb?.();
       if (!db) return;
-      await dbMod.update(dbMod.ref(db,'rooms/'+window.tvRoomCode),{
-        scrollControl:{speed,running,fontSize,source,updatedAt:dbMod.serverTimestamp()}
-      });
+      await dbMod.set(dbMod.ref(db,'rooms/'+window.tvRoomCode+'/scrollControl'),
+        {speed,running,fontSize,source,updatedAt:dbMod.serverTimestamp()});
     }).catch(e=>console.warn('TV vadības stāvokļa nosūtīšana neizdevās:',e));
   }
   function applyRemote(c) {
