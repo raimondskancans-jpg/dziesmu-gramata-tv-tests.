@@ -277,6 +277,7 @@
     .search-feel-text { font-size:.96rem; line-height:1.5; }
     .search-feel-entry { display:none; }
     .search-query { width:100%; box-sizing:border-box; border:1px solid #ccc; border-radius:12px; padding:12px; font-size:1rem; background:#fff; }
+    .search-main-input { margin:0 0 10px; min-height:48px; border:2px solid #9b2638; box-shadow:0 1px 4px rgba(0,0,0,.06); }
     .search-choice-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; }
     .search-choice { border:0; border-radius:11px; padding:10px 8px; background:#f0f0f0; font-size:.9rem; cursor:pointer; }
     .search-results3 { margin-top:10px; min-height:120px; max-height:43vh; overflow:auto; border-radius:14px; background:#fff; }
@@ -791,6 +792,7 @@ Celmotāji līdumā
       </div>
 
       <div id="searchBox3" class="search-panel search-file-manager" style="display: none;">
+        <input id="songSearchMainInput" class="search-query search-main-input" type="search" placeholder="Meklēt dziesmu pēc nosaukuma, vārdiem vai apraksta…" oninput="filterSongsList()" autocomplete="off">
         <div class="search-bars" id="searchBars3" style="display: flex;">
           <button class="search-bar" onclick="openSearchSection('feel')"><span>❤️ Meklēt pēc sajūtas</span><span class="search-chevron">▼</span></button>
           <button class="search-bar" onclick="openSearchSection('mood')"><span>🎵 Pēc noskaņas</span><span class="search-chevron">▼</span></button>
@@ -5175,26 +5177,32 @@ pēc video apraksta dziesmas komponējis neredzīgais komponists imants ozols, d
       const elem = document.getElementById('searchBtn3');
       if (!elem) return;
       let timer = null;
-      let longTriggered = false;
-      const start = () => {
-        longTriggered = false;
-        if (timer) clearTimeout(timer);
+      let suppressNextClick = false;
+      const clearTimer = () => { if (timer) { clearTimeout(timer); timer = null; } };
+      elem.addEventListener('pointerdown', () => {
+        suppressNextClick = false;
+        clearTimer();
         timer = setTimeout(() => {
-          longTriggered = true;
+          timer = null;
+          suppressNextClick = true;
           triggerVibrate();
           closeSearchSection();
           closeAdminModal();
           openAdminModal();
         }, 5000);
-      };
-      const end = () => {
-        if (timer) { clearTimeout(timer); timer = null; }
-        if (!longTriggered) toggleSearch('searchBox3');
-      };
-      elem.addEventListener('pointerdown', start);
-      elem.addEventListener('pointerup', end);
-      elem.addEventListener('pointercancel', () => { if (timer) clearTimeout(timer); timer = null; });
-      elem.addEventListener('pointerleave', () => { if (timer) clearTimeout(timer); timer = null; });
+      });
+      elem.addEventListener('pointerup', clearTimer);
+      elem.addEventListener('pointercancel', clearTimer);
+      elem.addEventListener('pointerleave', clearTimer);
+      elem.addEventListener('click', event => {
+        if (suppressNextClick) {
+          suppressNextClick = false;
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        toggleSearch('searchBox3');
+      });
     })();
     setupHoldHandler('avatarBtnHolder', () => { document.getElementById('avatarFileInput').click(); }, () => { openAvatarModal(); });
     setupHoldHandler('secureShareBoxHolder', () => {
@@ -5359,6 +5367,8 @@ pēc video apraksta dziesmas komponējis neredzīgais komponists imants ozols, d
     let tvFirebaseDb = null;
     window.getTvFirebaseDb = () => tvFirebaseDb;
     let tvLyricsAreSent = false;
+    let tvSongCommandInitialized = false;
+    let lastTvSongCommandId = null;
     window.tvControllerApproved = false;
     window.tvControllerUid = null;
 
@@ -5388,6 +5398,27 @@ pēc video apraksta dziesmas komponējis neredzīgais komponists imants ozols, d
             window.tvControllerApproved = snap.val() === uid;
             document.documentElement.dataset.tvControllerApproved = window.tvControllerApproved ? 'yes' : 'no';
           });
+          // TV pults var pieprasīt iepriekšējo vai nākamo dziesmu.
+          // Pirmo momentuzņēmumu tikai iegaumējam, lai pēc QR pieslēguma
+          // nejauši neizpildītu vecu komandu.
+          dbMod.onValue(dbMod.ref(tvFirebaseDb, 'rooms/' + tvRoomCode + '/songCommand'), snap => {
+            const command = snap.val();
+            if (!tvSongCommandInitialized) {
+              tvSongCommandInitialized = true;
+              lastTvSongCommandId = command?.commandId || null;
+              return;
+            }
+            if (!command?.commandId || command.commandId === lastTvSongCommandId) return;
+            lastTvSongCommandId = command.commandId;
+            if (!window.tvControllerApproved) return;
+            const orderedSongs = [...savedSongsList].sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, {numeric:true}));
+            const currentIndex = orderedSongs.findIndex(song => String(song.id) === String(currentSongId));
+            if (currentIndex < 0) return;
+            const nextIndex = command.action === 'next' ? currentIndex + 1 : command.action === 'previous' ? currentIndex - 1 : currentIndex;
+            if (nextIndex < 0 || nextIndex >= orderedSongs.length || nextIndex === currentIndex) return;
+            const nextSong = orderedSongs[nextIndex];
+            openSong(nextSong.id, nextSong.title);
+          });
           return { ...dbMod };
         })();
       }
@@ -5400,10 +5431,12 @@ pēc video apraksta dziesmas komponējis neredzīgais komponists imants ozols, d
       const title = document.getElementById('currentSongTitle')?.innerText || (currentSongId + '. Dziesma');
       const lyrics = typeof song.lyrics === 'string' ? song.lyrics : '';
       const dbMod = await ensureTvFirebase();
-      const base = 'rooms/' + tvRoomCode + '/';
-      await dbMod.set(dbMod.ref(tvFirebaseDb, base + 'title'), title);
-      await dbMod.set(dbMod.ref(tvFirebaseDb, base + 'lyrics'), lyrics || 'Teksts vēl nav pievienots.');
-      await dbMod.set(dbMod.ref(tvFirebaseDb, base + 'updatedAt'), dbMod.serverTimestamp());
+      const roomRef = dbMod.ref(tvFirebaseDb, 'rooms/' + tvRoomCode);
+      await dbMod.update(roomRef, {
+        title,
+        lyrics: lyrics || 'Teksts vēl nav pievienots.',
+        updatedAt: dbMod.serverTimestamp()
+      });
     }
 
     async function triggerCast() {
@@ -5422,16 +5455,16 @@ pēc video apraksta dziesmas komponējis neredzīgais komponists imants ozols, d
             return;
           }
           if (tvLyricsAreSent) {
-            await dbMod.set(dbMod.ref(tvFirebaseDb, base + 'title'), 'Mana dziesmu grāmata');
-            await dbMod.set(dbMod.ref(tvFirebaseDb, base + 'lyrics'), '');
-            await dbMod.set(dbMod.ref(tvFirebaseDb, base + 'updatedAt'), dbMod.serverTimestamp());
+            await dbMod.update(dbMod.ref(tvFirebaseDb, 'rooms/' + tvRoomCode), {
+              title: 'Mana dziesmu grāmata', lyrics: '', updatedAt: dbMod.serverTimestamp()
+            });
             tvLyricsAreSent = false;
             if (window.setTvRemoteActive) window.setTvRemoteActive(false);
             buttons.forEach(b => { b.title = 'Pārraidīt uz TV'; b.setAttribute('aria-label', 'Pārraidīt uz TV'); });
           } else {
-            await dbMod.set(dbMod.ref(tvFirebaseDb, base + 'title'), title);
-            await dbMod.set(dbMod.ref(tvFirebaseDb, base + 'lyrics'), lyrics || 'Teksts vēl nav pievienots.');
-            await dbMod.set(dbMod.ref(tvFirebaseDb, base + 'updatedAt'), dbMod.serverTimestamp());
+            await dbMod.update(dbMod.ref(tvFirebaseDb, 'rooms/' + tvRoomCode), {
+              title, lyrics: lyrics || 'Teksts vēl nav pievienots.', updatedAt: dbMod.serverTimestamp()
+            });
             tvLyricsAreSent = true;
             if (window.setTvRemoteActive) window.setTvRemoteActive(true);
             buttons.forEach(b => { b.title = 'Noņemt no TV'; b.setAttribute('aria-label', 'Noņemt no TV'); });
@@ -5961,7 +5994,7 @@ pēc video apraksta dziesmas komponējis neredzīgais komponists imants ozols, d
       if (!songs.length) {
         const empty = document.createElement('div');
         empty.className = 'search-empty';
-        empty.textContent = 'Nav atrastu dziesmu.';
+        empty.textContent = activeSearchQuery ? `Nav atrastu dziesmu pēc “${activeSearchQuery}”. Pamēģini citu vārdu.` : 'Dziesmu saraksts ir tukšs.';
         box.appendChild(empty);
         return;
       }
@@ -5985,28 +6018,97 @@ pēc video apraksta dziesmas komponējis neredzīgais komponists imants ozols, d
       return String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
     }
 
-    function filterSongsList() {
-      const input = document.getElementById('songSearchInput');
-      const q = input ? input.value.toLowerCase().trim() : '';
+    let activeSearchQuery = '';
+    let activeSearchFilter = null;
+
+    function normalizeSongSearch(value) {
+      return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('lv').trim();
+    }
+
+    // Kategoriju filtri meklē pēc vairākām teksta formām, jo vecākajām dziesmām
+    // nav atsevišķi piešķirtu žanru tagu. Netiek izdomāti jauni dziesmu dati.
+    const SEARCH_FILTER_TERMS = {
+      'jautra':['jautr','lust','priec','humor','joku','smiekl','dzirkst'],
+      'romantiska':['romant','milest','sirds','skupst','iemil','milu'],
+      'sirsnīga':['sirsn','mil','gimen','draug','maig'],
+      'mierīga':['mier','kluss','klus','leni','vakara','ilgas'],
+      'lustīga':['lust','jautr','danc','polk','joku','priec'],
+      'svinīga':['svin','janu','kazu','jubilej','dzimsanas','galda'],
+      'pie galda':['galda','iedzert','dzert','alus','saimniek','vies','svin'],
+      'dejas':['vals','polk','dejo','danc','ritm','takt'],
+      'ballīte':['ball','lust','jautr','svin','dzert','dej'],
+      'kāzas':['kaz','ligav','prec','vedib','purs','jaunais paris'],
+      'jubileja':['jubilej','dzimsanas','gadi','vecum','svin'],
+      'kopīgai dziedāšanai':['kop','visi','dzied','tautasdziesm','galda'],
+      'valsis':['vals'],
+      'polka':['polk'],
+      'šlāgeris':['slager','estrad','populardziesm'],
+      'lēna':['len','mier','vals','ilgas','skumj'],
+      'ātra':['atr','strauj','polk','ritm','danc'],
+      'ritms':['ritm','takts','polk','vals'],
+      'mīlest':['milest','mil','sirds','skupst','iemil','mīļ'],
+      'daba':['daba','mez','pried','ozol','zied','jura','upe','putn','puķ'],
+      'dzīve':['dzive','likten','laime','gadi','jaunib','vecum'],
+      'draudz':['draug','biedr','brali','masa'],
+      'ģimene':['gimen','mate','tevs','ber','masa','brali'],
+      'dzimtene':['dzimten','latvij','dzimta','novad','daugav','gauja']
+    };
+
+    function getSearchHaystack(item) {
+      const data = songsData[item.id] || {};
+      return normalizeSongSearch([
+        item.id, item.title, data.history || '', data.lyrics || '', data.source || '',
+        data.notes || '', ...(Array.isArray(data.tags) ? data.tags : [])
+      ].join(' '));
+    }
+
+    function filterSongsList(queryOverride) {
+      const mainInput = document.getElementById('songSearchMainInput');
+      const feelInput = document.getElementById('songSearchInput');
+      const active = document.activeElement;
+      let rawQuery;
+      if (queryOverride !== undefined) {
+        rawQuery = queryOverride;
+      } else if (active === feelInput && feelInput) {
+        rawQuery = feelInput.value;
+        activeSearchFilter = null;
+      } else if (active === mainInput && mainInput) {
+        rawQuery = mainInput.value;
+        activeSearchFilter = null;
+      } else {
+        rawQuery = mainInput && mainInput.value !== '' ? mainInput.value :
+                   feelInput && feelInput.value !== '' ? feelInput.value : activeSearchQuery;
+      }
+      activeSearchQuery = String(rawQuery || '').trim();
+      const q = normalizeSongSearch(activeSearchQuery);
+      const words = q.split(/\s+/).filter(Boolean);
+      const filterTerms = activeSearchFilter ? SEARCH_FILTER_TERMS[activeSearchFilter] : null;
+      const normalizedTerms = filterTerms ? filterTerms.map(normalizeSongSearch) : null;
       const list = getSearchSongs().filter(item => {
-        const id = String(item.id || '').toLowerCase();
-        const title = String(item.title || '').toLowerCase();
-        const data = songsData[item.id] || {};
-        const haystack = [id, title, data.history || '', data.lyrics || '', ...(Array.isArray(data.tags) ? data.tags : [])].join(' ').toLowerCase();
-        return !q || haystack.includes(q);
+        const haystack = getSearchHaystack(item);
+        if (normalizedTerms) return normalizedTerms.some(term => term && haystack.includes(term));
+        return !words.length || words.every(word => haystack.includes(word));
       });
       renderSearchResults(list);
+      const heading = document.querySelector('#searchResults3 .search-results-title');
+      if (heading) heading.textContent = activeSearchQuery ? `Meklēšanas rezultāti (${list.length})` : `Dziesmas (${list.length})`;
     }
 
     function filterTag(tagName) {
-      const input = document.getElementById('songSearchInput');
-      if (input) input.value = tagName;
-      filterSongsList();
+      activeSearchQuery = String(tagName || '').trim();
+      activeSearchFilter = activeSearchQuery;
+      const mainInput = document.getElementById('songSearchMainInput');
+      const feelInput = document.getElementById('songSearchInput');
+      if (mainInput) mainInput.value = activeSearchQuery;
+      if (feelInput) feelInput.value = activeSearchQuery;
+      filterSongsList(activeSearchQuery);
     }
 
     function sortSongsAlphabetically() {
       const list = getSearchSongs().sort((a,b) => String(a.title).localeCompare(String(b.title), 'lv', {sensitivity:'base'}));
       renderSearchResults(list);
+      const heading = document.querySelector('#searchResults3 .search-results-title');
+      if (heading) heading.textContent = `Alfabēta kārtībā (${list.length})`;
     }
 
     function openSearchSection(name) {
@@ -6014,6 +6116,12 @@ pēc video apraksta dziesmas komponējis neredzīgais komponists imants ozols, d
       const panel = document.getElementById('searchSection3');
       const content = document.getElementById('searchSectionContent3');
       if (!bars || !panel || !content) return;
+      activeSearchFilter = null;
+      activeSearchQuery = '';
+      const mainInput = document.getElementById('songSearchMainInput');
+      const feelInput = document.getElementById('songSearchInput');
+      if (mainInput) mainInput.value = '';
+      if (feelInput) feelInput.value = '';
       bars.style.display = 'none';
       panel.style.display = 'block';
 
@@ -6021,13 +6129,13 @@ pēc video apraksta dziesmas komponējis neredzīgais komponists imants ozols, d
       let html = '';
 
       if (name === 'feel') {
-        html = `<div class="search-section-content search-feel-box" onclick="activateFeelSearch()">
+        html = `<div class="search-section-content search-feel-box">
           <div id="searchFeelIntro" class="search-feel-text">
             <b>Nezini dziesmas nosaukumu? Nekas!</b><br><br>
             🎉 “Gribu kaut ko jautru, ko visi pie galda var dziedāt.”<br>
             💃 “Gribu valsi pārim.”<br>
             🌅 “Gribu tādu dziesmu, kas uzreiz uzlabo vakara noskaņu.”<br><br>
-            <b>Pieskaries šeit — teksts pazudīs, un vari ierakstīt vai ierunāt.</b>
+            <button type="button" class="search-choice" style="width:100%;margin-top:8px;" onclick="activateFeelSearch()">Sākt meklēt pēc sajūtas</button>
           </div>
           <div id="searchFeelEntry" class="search-feel-entry">
             <input id="songSearchInput" class="search-query" type="text" placeholder="✍️ Ko šobrīd gribas dziedāt?" oninput="filterSongsList()" autocomplete="off">
@@ -6061,7 +6169,7 @@ pēc video apraksta dziesmas komponējis neredzīgais komponists imants ozols, d
       if (name === 'alphabet') {
         sortSongsAlphabetically();
       } else {
-        renderSearchResults(getSearchSongs());
+        filterSongsList();
       }
     }
 
@@ -6086,15 +6194,24 @@ pēc video apraksta dziesmas komponējis neredzīgais komponists imants ozols, d
       if (bars) bars.style.display = 'flex';
       if (panel) panel.style.display = 'none';
       if (content) content.innerHTML = '';
-      renderSearchResults(getSearchSongs());
+      activeSearchFilter = null;
+      filterSongsList();
     }
 
     function toggleSearch(elementId) {
       const box = document.getElementById(elementId);
       if (!box) return;
-      const willOpen = box.style.display !== 'block';
+      const willOpen = getComputedStyle(box).display === 'none';
       box.style.display = willOpen ? 'block' : 'none';
+      const searchButton = document.getElementById('searchBtn3');
+      if (searchButton) searchButton.setAttribute('aria-expanded', String(willOpen));
       if (willOpen) {
+        activeSearchFilter = null;
+        activeSearchQuery = '';
+        const mainInput = document.getElementById('songSearchMainInput');
+        const feelInput = document.getElementById('songSearchInput');
+        if (mainInput) mainInput.value = '';
+        if (feelInput) feelInput.value = '';
         closeSearchSection();
         renderSearchResults(getSearchSongs());
       }
@@ -6352,9 +6469,10 @@ pēc video apraksta dziesmas komponējis neredzīgais komponists imants ozols, d
   <button type="button" class="font-btn" id="phoneFontMinus" aria-label="Samazināt TV burtus">A−</button>
   <button type="button" class="font-btn" id="phoneFontPlus" aria-label="Palielināt TV burtus">A+</button>
   <span class="phone-divider"></span>
-  <button type="button" data-phone-speed="0.4" aria-label="Zaķis 0,40" aria-pressed="false">🐇</button>
-  <button type="button" data-phone-speed="0.1" aria-label="Bruņurupucis 0,10" aria-pressed="true">🐢</button>
-  <button type="button" data-phone-speed="0.05" aria-label="Gliemezis 0,05" aria-pressed="false">🐌</button>
+  <button type="button" data-phone-speed="0.4" title="Zaķis — 24 px/s" aria-label="Zaķis — 24 pikseļi sekundē" aria-pressed="false">🐇</button>
+  <button type="button" data-phone-speed="0.1" title="Bruņurupucis — 6 px/s" aria-label="Bruņurupucis — 6 pikseļi sekundē" aria-pressed="true">🐢</button>
+  <button type="button" data-phone-speed="0.05" title="Gliemezis — 3 px/s" aria-label="Gliemezis — 3 pikseļi sekundē" aria-pressed="false">🐌</button>
+  <span id="phoneSpeedStatus" aria-live="polite" style="font-size:10px;font-weight:700;white-space:nowrap;">BRUŅURUPUCIS · 6 px/s</span>
   <button type="button" id="phoneScrollPause" aria-label="Turpināt ritināšanu">▶</button>
 </div>
 <script>
@@ -6362,8 +6480,9 @@ pēc video apraksta dziesmas komponējis neredzīgais komponists imants ozols, d
 (function () {
   const speeds = [0.4, 0.1, 0.05];
   const labels = {'0.4':'ZAĶIS','0.1':'BRUŅURUPUCIS','0.05':'GLIEMEZIS'};
+  const rates = {'0.4':24,'0.1':6,'0.05':3};
   let speed = 0.1, running = false, fontSize = 56;
-  let frame = 0, previousTime = 0, writeQueue = Promise.resolve();
+  let frame = 0, previousTime = 0, scrollRemainder = 0, writeQueue = Promise.resolve();
   let remoteActive = false, applyingRemote = false;
   const $ = id => document.getElementById(id);
   const lyrics = () => $('tvStageLyrics');
@@ -6376,8 +6495,11 @@ pēc video apraksta dziesmas komponējis neredzīgais komponists imants ozols, d
       const v = Number(b.dataset.tvSpeed ?? b.dataset.phoneSpeed);
       b.setAttribute('aria-pressed', String(v === speed));
     });
+    const statusText = labels[String(speed)] + ' · ' + rates[String(speed)] + ' px/s' + (running ? ' · RITINĀS' : ' · GATAVS');
     const status = $('tvScrollStatus');
-    if (status) status.textContent = running ? labels[String(speed)] : 'PAUZE';
+    if (status) status.textContent = statusText;
+    const phoneStatus = $('phoneSpeedStatus');
+    if (phoneStatus) phoneStatus.textContent = statusText;
     const pause = $('tvScrollPause');
     if (pause) { pause.textContent = running ? 'Ⅱ' : '▶'; pause.setAttribute('aria-label', running ? 'Apturēt ritināšanu' : 'Turpināt ritināšanu'); }
     const phonePause = $('phoneScrollPause');
@@ -6385,19 +6507,25 @@ pēc video apraksta dziesmas komponējis neredzīgais komponists imants ozols, d
   }
   function stopLoop() {
     if (frame) cancelAnimationFrame(frame);
-    frame = 0; previousTime = 0;
+    frame = 0; previousTime = 0; scrollRemainder = 0;
   }
   function tick(t) {
     if (!running) { stopLoop(); return; }
     const el = lyrics();
     if (!el || !stageOpen()) { stopLoop(); return; }
     if (previousTime) {
-      const dt = Math.min(60, t - previousTime);
+      const dt = Math.min(250, t - previousTime);
       const max = Math.max(0, el.scrollHeight - el.clientHeight);
-      // Ātrumi ir lietotāja noteiktie koeficienti: 0,40 / 0,10 / 0,05.
-      // Reizinātājs nodrošina redzamu, bet proporcionāli ļoti lēnu kustību.
-      if (el.scrollTop < max - 1) el.scrollTop = Math.min(max, el.scrollTop + speed * 60 * dt / 1000);
-      else { running = false; paint(); stopLoop(); publish('phone'); return; }
+      // Uzkrājam daļējos pikseļus un pārvietojam tekstu veselos pikseļos.
+      // Tas novērš 0,05 px kadra kustības noapaļošanu Android/TV pārlūkā.
+      scrollRemainder += speed * 60 * dt / 1000;
+      const wholePixels = Math.floor(scrollRemainder);
+      if (wholePixels > 0 && el.scrollTop < max) {
+        const before = el.scrollTop;
+        el.scrollTop = Math.min(max, before + wholePixels);
+        scrollRemainder -= Math.max(0, el.scrollTop - before);
+      }
+      if (el.scrollTop >= max - 1) { running = false; paint(); stopLoop(); publish('phone'); return; }
     }
     previousTime = t;
     frame = requestAnimationFrame(tick);
@@ -6405,6 +6533,7 @@ pēc video apraksta dziesmas komponējis neredzīgais komponists imants ozols, d
   function startLoop() { if (running && !frame) { previousTime = 0; frame = requestAnimationFrame(tick); } }
   function publish(source) {
     if (!window.tvSenderMode || !window.tvRoomCode || !window.ensureTvFirebase || applyingRemote) return;
+    if (!window.tvControllerApproved) return;
     writeQueue = writeQueue.catch(()=>{}).then(async()=>{
       const dbMod = await window.ensureTvFirebase();
       const db = window.getTvFirebaseDb?.();
@@ -6432,11 +6561,11 @@ pēc video apraksta dziesmas komponējis neredzīgais komponists imants ozols, d
   }
   document.addEventListener('click',e=>{
     const b=e.target.closest('[data-tv-speed],[data-phone-speed]');
-    if(b){change({speed:Number(b.dataset.tvSpeed ?? b.dataset.phoneSpeed)});return;}
+    if(b){change({speed:Number(b.dataset.tvSpeed ?? b.dataset.phoneSpeed),running:true});return;}
     if(e.target.closest('#tvScrollPause')||e.target.closest('#phoneScrollPause')){change({running:!running});return;}
     if(e.target.closest('#tvFontPlus')||e.target.closest('#phoneFontPlus')){change({fontSize:fontSize+4});return;}
     if(e.target.closest('#tvFontMinus')||e.target.closest('#phoneFontMinus')){change({fontSize:fontSize-4});return;}
-    if(e.target.closest('#tvScrollStart')){const el=lyrics();if(el)el.scrollTo({top:0,behavior:'smooth'});}
+    if(e.target.closest('#tvScrollStart')){const el=lyrics();if(el)el.scrollTo({top:0,behavior:'smooth'});change({running:true});}
   });
   window.setTvRemoteActive = function(active) {
     remoteActive = !!active;
