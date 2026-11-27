@@ -5,13 +5,27 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Dziesmu grāmata — TV ekrāns (tests)</title>
 <style>
-:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#000;color:#fff;font-family:Arial,Helvetica,sans-serif;min-height:100vh}header{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-bottom:1px solid #333}header h1{font-size:clamp(18px,3vw,30px);margin:0;font-weight:600}button{border:1px solid #777;border-radius:10px;background:#202020;color:#fff;padding:10px 14px;font-size:16px;cursor:pointer}button:disabled{opacity:.45;cursor:default}.status{padding:10px 18px;color:#bbb;font-size:14px}.stage{height:calc(100vh - 100px);display:flex;flex-direction:column;padding:18px 5vw 5vh}.title{text-align:center;font-size:clamp(22px,3vw,38px);font-weight:700;margin:0 0 18px}.lyrics{flex:1;overflow:auto;white-space:pre-wrap;line-height:1.5;text-align:center;font-size:56px;padding:0 2vw 40px;scrollbar-width:none}.lyrics::-webkit-scrollbar{display:none}.overlay{position:fixed;inset:0;background:#000e;display:flex;align-items:center;justify-content:center;padding:18px;z-index:10}.panel{width:min(680px,100%);max-height:90vh;overflow:auto;background:#171717;border:1px solid #555;border-radius:18px;padding:22px}.panel h2{margin:0 0 12px}.panel p{color:#ccc;line-height:1.45}.qr{display:flex;justify-content:center;background:white;padding:14px;border-radius:12px;width:max-content;max-width:100%;margin:16px auto}.code{text-align:center;font-size:24px;letter-spacing:4px;font-weight:bold}.requests{display:grid;gap:10px;margin:12px 0}.request{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:#292929;border-radius:10px;padding:10px}.muted{color:#aaa;font-size:13px}.actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:14px}.hidden{display:none!important}.small{font-size:13px;color:#aaa}
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#000;color:#fff;font-family:Arial,Helvetica,sans-serif;min-height:100vh}header{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-bottom:1px solid #333}header h1{font-size:clamp(18px,3vw,30px);margin:0;font-weight:600}button{border:1px solid #777;border-radius:10px;background:#202020;color:#fff;padding:10px 14px;font-size:16px;cursor:pointer}button:disabled{opacity:.45;cursor:default}.status{padding:10px 18px;color:#bbb;font-size:14px}.stage{height:calc(100vh - 166px);display:flex;flex-direction:column;padding:18px 5vw 3vh}.title{text-align:center;font-size:clamp(22px,3vw,38px);font-weight:700;margin:0 0 18px}.lyrics{flex:1;overflow:auto;white-space:pre-wrap;line-height:1.5;text-align:center;font-size:56px;padding:0 2vw 40px;scrollbar-width:none}.lyrics::-webkit-scrollbar{display:none}.overlay{position:fixed;inset:0;background:#000e;display:flex;align-items:center;justify-content:center;padding:18px;z-index:10}.panel{width:min(680px,100%);max-height:90vh;overflow:auto;background:#171717;border:1px solid #555;border-radius:18px;padding:22px}.panel h2{margin:0 0 12px}.panel p{color:#ccc;line-height:1.45}.qr{display:flex;justify-content:center;background:white;padding:14px;border-radius:12px;width:max-content;max-width:100%;margin:16px auto}.code{text-align:center;font-size:24px;letter-spacing:4px;font-weight:bold}.requests{display:grid;gap:10px;margin:12px 0}.request{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:#292929;border-radius:10px;padding:10px}.muted{color:#aaa;font-size:13px}.actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:14px}.hidden{display:none!important}.small{font-size:13px;color:#aaa}.tv-controls{min-height:66px;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;padding:8px 14px;background:#101010;border-top:1px solid #333}.tv-controls button{min-width:52px;min-height:46px;font-size:20px;font-weight:700;padding:8px 13px}.tv-controls button[aria-pressed="true"]{background:#8f1726;border-color:#ffd166;box-shadow:0 0 0 2px #ffd16633}.tv-controls .control-label{font-size:11px;color:#aaa;font-weight:700;letter-spacing:.05em}.tv-controls .separator{height:30px;width:1px;background:#555;margin:0 3px}@media(max-width:700px){.tv-controls{gap:6px}.tv-controls button{min-width:44px;min-height:42px;padding:6px 9px}.stage{height:calc(100vh - 190px);padding:12px 3vw 2vh}.lyrics{font-size:42px!important}}
 </style>
 </head>
 <body>
 <header><h1>Dziesmu grāmata — TV ekrāns</h1><button id="reopen">Vadība</button></header>
 <div class="status" id="status">Pieslēdzam testa Firebase…</div>
 <main class="stage"><div class="title" id="songTitle">Gaida dziesmu…</div><div class="lyrics" id="songLyrics"></div></main>
+<nav class="tv-controls" aria-label="Dziesmu un teksta vadība">
+ <button type="button" id="tvPreviousSong" title="Iepriekšējā dziesma" aria-label="Iepriekšējā dziesma">◀|</button>
+ <button type="button" id="tvNextSong" title="Nākamā dziesma" aria-label="Nākamā dziesma">|▶</button>
+ <span class="separator"></span>
+ <button type="button" id="tvFontDown" title="Samazināt burtus" aria-label="Samazināt burtus">A−</button>
+ <button type="button" id="tvFontUp" title="Palielināt burtus" aria-label="Palielināt burtus">A+</button>
+ <span class="separator"></span>
+ <button type="button" data-tv-speed="0.4" title="Zaķis — ātrāk" aria-label="Zaķis — ātrāk">🐇</button>
+ <button type="button" data-tv-speed="0.1" title="Bruņurupucis" aria-label="Bruņurupucis">🐢</button>
+ <button type="button" data-tv-speed="0.05" title="Gliemezis — lēnāk" aria-label="Gliemezis — lēnāk">🐌</button>
+ <button type="button" id="tvPause" title="Pauze / turpināt" aria-label="Pauze vai turpināt">▶</button>
+ <span class="control-label" id="tvSpeedStatus">BRUŅURUPUCIS · 6 px/s</span>
+ <button type="button" id="tvScrollTop" title="Sākt no sākuma" aria-label="Sākt no sākuma">↟</button>
+</nav>
 <div class="overlay" id="setup">
  <section class="panel">
   <h2>TV pieslēgšana</h2>
@@ -29,16 +43,59 @@
 <script type="module">
 const config={apiKey:'AIzaSyAgP5N2fCBeeyB_hXzC3ysb6J2-VPcUgzo',authDomain:'digitala-dziesmu-gramata-test.firebaseapp.com',databaseURL:'https://digitala-dziesmu-gramata-test-default-rtdb.europe-west1.firebasedatabase.app',projectId:'digitala-dziesmu-gramata-test',appId:'1:917156239812:web:d55031b0d3607a41b96c91'};
 const statusEl=document.getElementById('status'),setup=document.getElementById('setup'),requestsEl=document.getElementById('requests'),lyricsEl=document.getElementById('songLyrics');
-let db,dbm,roomCode,roomRef,ownerUid,controllerUid=null,roomData=null,anim=0,last=0;
+let db,dbm,roomCode,roomRef,ownerUid,controllerUid=null,roomData=null,anim=0,last=0,scrollRemainder=0;
 const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 function makeCode(){const b=new Uint8Array(8);crypto.getRandomValues(b);return [...b].map(x=>alphabet[x%alphabet.length]).join('')}
 function setStatus(t){statusEl.textContent=t}
-function renderRoom(data){roomData=data||{};document.getElementById('songTitle').textContent=data?.title||'Gaida dziesmu…';lyricsEl.textContent=data?.lyrics||'';controllerUid=data?.controllerUid||null;document.getElementById('revoke').classList.toggle('hidden',!controllerUid);renderRequests(data?.pendingRequests||{});const c=data?.scrollControl||{};if(Number.isFinite(Number(c.fontSize)))lyricsEl.style.fontSize=Math.max(28,Math.min(96,Number(c.fontSize)))+'px';if(c.running){startScroll(Number(c.speed)||0.1)}else{stopScroll()}}
+let lastSongRenderKey='';
+function renderRoom(data){
+ roomData=data||{};
+ const title=data?.title||'Gaida dziesmu…',text=data?.lyrics||'';
+ const renderKey=title+'\u0000'+text;
+ if(renderKey!==lastSongRenderKey){
+  lyricsEl.scrollTop=0;lastSongRenderKey=renderKey;
+  document.getElementById('songTitle').textContent=title;
+  lyricsEl.textContent=text;
+ }
+ controllerUid=data?.controllerUid||null;document.getElementById('revoke').classList.toggle('hidden',!controllerUid);
+ document.getElementById('tvPreviousSong').disabled=!controllerUid;
+ document.getElementById('tvNextSong').disabled=!controllerUid;
+ renderRequests(data?.pendingRequests||{});
+ const c=data?.scrollControl||{};
+ const fontSize=Math.max(28,Math.min(96,Number(c.fontSize)||56));
+ lyricsEl.style.fontSize=fontSize+'px';
+ document.querySelectorAll('[data-tv-speed]').forEach(b=>b.setAttribute('aria-pressed',String(Number(b.dataset.tvSpeed)===(Number(c.speed)||0.1))));
+ const rate=Math.round((Number(c.speed)||0.1)*60);
+ const speedName=rate<=3?'GLIEMEZIS':rate<=6?'BRUŅURUPUCIS':'ZAĶIS';
+ document.getElementById('tvSpeedStatus').textContent=speedName+' · '+rate+' px/s'+(c.running?' · RITINĀS':' · GATAVS');
+ const pause=document.getElementById('tvPause');pause.textContent=c.running?'Ⅱ':'▶';pause.setAttribute('aria-label',c.running?'Apturēt ritināšanu':'Turpināt ritināšanu');
+ if(c.running){startScroll()}else{stopScroll()}
+}
+async function updateScrollControl(patch){
+ const current=roomData?.scrollControl||{speed:0.1,running:false,fontSize:56};
+ const next={speed:Number(current.speed)||0.1,running:!!current.running,fontSize:Math.max(28,Math.min(96,Number(current.fontSize)||56)),...patch,source:'tv',updatedAt:dbm.serverTimestamp()};
+ try{await dbm.update(dbm.ref(db,'rooms/'+roomCode+'/scrollControl'),next)}catch(e){setStatus('TV vadības kļūda: '+e.message)}
+}
+async function requestSongChange(action){
+ try{await dbm.set(dbm.ref(db,'rooms/'+roomCode+'/songCommand'),{action,commandId:Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8),requestedAt:Date.now()})}
+ catch(e){setStatus('Dziesmas maiņas kļūda: '+e.message)}
+}
 function renderRequests(pending){requestsEl.replaceChildren();const entries=Object.entries(pending||{});if(!entries.length){const s=document.createElement('span');s.className='muted';s.textContent=controllerUid?'Vadību pašlaik tur viens telefons.':'Pagaidām nav pieprasījumu.';requestsEl.append(s);return}for(const [uid,req] of entries){const row=document.createElement('div');row.className='request';const label=document.createElement('span');label.textContent='Telefons · '+uid.slice(0,8);const approve=document.createElement('button');approve.textContent='Apstiprināt';approve.disabled=!!controllerUid;approve.onclick=()=>approveUid(uid);const reject=document.createElement('button');reject.textContent='Noraidīt';reject.onclick=()=>rejectUid(uid);row.append(label,approve,reject);requestsEl.append(row)}}
 async function approveUid(uid){try{await dbm.set(dbm.ref(db,'rooms/'+roomCode+'/controllerUid'),uid);await dbm.remove(dbm.ref(db,'rooms/'+roomCode+'/pendingRequests/'+uid));setStatus('Telefona vadība apstiprināta.')}catch(e){alert('Neizdevās apstiprināt: '+e.message)}}
 async function rejectUid(uid){try{await dbm.remove(dbm.ref(db,'rooms/'+roomCode+'/pendingRequests/'+uid))}catch(e){alert('Neizdevās noraidīt: '+e.message)}}
-function stopScroll(){if(anim)cancelAnimationFrame(anim);anim=0;last=0}
-function startScroll(speed){if(anim)return;const step=t=>{if(!roomData?.scrollControl?.running){stopScroll();return}if(last){const dt=Math.min(60,t-last);const max=Math.max(0,lyricsEl.scrollHeight-lyricsEl.clientHeight);lyricsEl.scrollTop=Math.min(max,lyricsEl.scrollTop+speed*60*dt/1000);if(lyricsEl.scrollTop>=max-1){stopScroll();return}}last=t;anim=requestAnimationFrame(step)};anim=requestAnimationFrame(step)}
+function stopScroll(){if(anim)cancelAnimationFrame(anim);anim=0;last=0;scrollRemainder=0}
+function startScroll(){if(anim)return;const step=t=>{
+ const control=roomData?.scrollControl||{};
+ if(!control.running){stopScroll();return}
+ if(last){const dt=Math.min(250,t-last);const max=Math.max(0,lyricsEl.scrollHeight-lyricsEl.clientHeight);const speed=Math.max(0.01,Number(control.speed)||0.1);
+  // 0,05 un 0,10 dod attiecīgi 3 un 6 px/s. Daļējos pikseļus uzkrājam,
+  // lai pārlūks tos nenomestu katrā animācijas kadrā.
+  scrollRemainder+=speed*60*dt/1000;const wholePixels=Math.floor(scrollRemainder);
+  if(wholePixels>0&&lyricsEl.scrollTop<max){const before=lyricsEl.scrollTop;lyricsEl.scrollTop=Math.min(max,before+wholePixels);scrollRemainder-=Math.max(0,lyricsEl.scrollTop-before)}
+  if(lyricsEl.scrollTop>=max-1){stopScroll();return}
+ }
+ last=t;anim=requestAnimationFrame(step)
+ };anim=requestAnimationFrame(step)}
 async function endRoom(){if(!confirm('Beigt šo TV testa sesiju?'))return;try{await dbm.remove(roomRef);location.reload()}catch(e){alert('Neizdevās beigt sesiju: '+e.message)}}
 try{
  const [appMod,authMod,dbMod]=await Promise.all([import('https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js'),import('https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js'),import('https://www.gstatic.com/firebasejs/11.6.0/firebase-database.js')]);dbm=dbMod;const app=appMod.initializeApp(config,'songbook-tv-receiver-test');const auth=authMod.getAuth(app);if(!auth.currentUser)await authMod.signInAnonymously(auth);ownerUid=auth.currentUser.uid;db=dbMod.getDatabase(app);roomCode=makeCode();roomRef=dbMod.ref(db,'rooms/'+roomCode);
@@ -47,6 +104,13 @@ try{
  dbMod.onValue(roomRef,snap=>{if(!snap.exists()){setStatus('TV sesija ir beigusies.');return}renderRoom(snap.val());setStatus(controllerUid?'Telefons ir pieslēgts vadībai.':'Gaida telefona pieslēgumu…')});
  document.getElementById('revoke').onclick=async()=>{try{await dbMod.set(dbMod.ref(db,'rooms/'+roomCode+'/controllerUid'),null);setStatus('Telefona vadība atsaukta.')}catch(e){alert(e.message)}};
  document.getElementById('endRoom').onclick=endRoom;document.getElementById('closeSetup').onclick=()=>setup.classList.add('hidden');document.getElementById('reopen').onclick=()=>setup.classList.remove('hidden');
+ document.getElementById('tvPreviousSong').onclick=()=>requestSongChange('previous');
+ document.getElementById('tvNextSong').onclick=()=>requestSongChange('next');
+ document.getElementById('tvFontDown').onclick=()=>updateScrollControl({fontSize:Math.max(28,(Number(roomData?.scrollControl?.fontSize)||56)-4)});
+ document.getElementById('tvFontUp').onclick=()=>updateScrollControl({fontSize:Math.min(96,(Number(roomData?.scrollControl?.fontSize)||56)+4)});
+ document.querySelectorAll('[data-tv-speed]').forEach(b=>b.onclick=()=>updateScrollControl({speed:Number(b.dataset.tvSpeed),running:true}));
+ document.getElementById('tvPause').onclick=()=>updateScrollControl({running:!roomData?.scrollControl?.running});
+ document.getElementById('tvScrollTop').onclick=()=>{lyricsEl.scrollTop=0;updateScrollControl({running:true})};
 }catch(e){setStatus('Savienojums neizdevās: '+e.message);document.getElementById('qr').textContent='Pārbaudi testa Firebase savienojumu un datubāzes noteikumus.'}
 </script>
 </body>
